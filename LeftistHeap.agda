@@ -149,7 +149,19 @@ merge-assoc (x ∷ xs) (y ∷ ys) [] =
   ≡⟨ Eq.cong (merge' (x ∷ xs)) (merge-idʳ (y ∷ ys)) ⟩
     merge' (x ∷ xs) (merge' (y ∷ ys) [])
   ∎
-merge-assoc (x ∷ xs) (y ∷ ys) (z ∷ zs) = {!   !}
+merge-assoc (x ∷ xs) (y ∷ ys) (z ∷ zs) with y Nat.≤? z | x Nat.≤? y
+... | yes y≤z | yes x≤y =
+  let open ≡-Reasoning in
+  begin
+    merge' (merge' (x ∷ xs) (y ∷ ys)) (z ∷ zs)
+  ≡⟨ {!   !} ⟩
+    merge' (x ∷ xs) (y ∷ merge' ys (z ∷ zs))
+  ≡⟨ {!   !} ⟩
+    merge' (x ∷ xs) (merge' (y ∷ ys) (z ∷ zs))
+  ∎
+... | yes y≤z | no x≤y = {!   !}
+... | no ¬y≤z | yes x≤y = {!   !}
+... | no ¬y≤z | no ¬x≤y = {!   !}
 
 meld/correct : ProperMeld meld
 meld/correct leaf t _ _ u = refl
