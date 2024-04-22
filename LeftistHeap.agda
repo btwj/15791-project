@@ -95,6 +95,10 @@ fooHeapAtLeast = minHeapNode (minHeapNode (minHeapNode minHeapLeaf minHeapLeaf (
 merge' : List ℕ → List ℕ → List ℕ
 merge' = merge Nat._≤?_
 
+ifElim : ∀ {A : Set} {x : A} {b : Bool} → (if b then x else x) ≡ x
+ifElim {A} {x} {false} = refl
+ifElim {A} {x} {true} = refl
+
 mergeComm : ∀ {x y : List ℕ} → merge' x y ≡ merge' y x
 mergeComm {[]} {[]} = refl
 mergeComm {[]} {y ∷ ys} = refl
@@ -168,7 +172,7 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x → ret (toList (node x₁ l₁ x)))  -- ???
-  ≡⟨ {!   !} ⟩
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → ifElim)) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         if rank l₁ <ᵇ rank x
@@ -207,5 +211,5 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
           (ret ∘ toList)))
   ∎
 ... | yes p | .false | ofⁿ ¬a | _ | _ = ⊥-elim (¬a p)
-... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a)
+... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a) 
 ... | no p | .false | ofⁿ ¬a | _ | _ = {!   !} -- symmetric?
