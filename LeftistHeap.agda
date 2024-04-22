@@ -111,7 +111,9 @@ mergeComm {x ∷ xs} {y ∷ ys} with x Nat.≤? y | x ≤ᵇ y | Nat.≤ᵇ-refl
           x ∷ merge' xs (y ∷ ys)
         ≡⟨ Eq.cong (x ∷_) (mergeComm {xs} {y ∷ ys}) ⟩
           x ∷ merge' (y ∷ ys) xs
-        ≡⟨ {!   !} ⟩
+        ≡⟨ {! refl  !} ⟩
+          (if y ≤ᵇ x then (y ∷ merge' ys (x ∷ xs)) else (x ∷ merge' (y ∷ ys) xs))
+        ≡⟨⟩
           merge' (y ∷ ys) (x ∷ xs)
         ∎
 ... | yes p | .false | ofⁿ ¬a = ⊥-elim (¬a p)
