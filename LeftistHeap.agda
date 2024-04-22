@@ -21,6 +21,7 @@ open import Calf.Data.BigO costMonoid
 open import Relation.Binary.PropositionalEquality as Eq using (_≡_; refl; _≢_; module ≡-Reasoning)
 open import Data.Nat as Nat using (_+_; _⊔_; _<_)
 import Data.Nat.Properties as Nat
+import Data.Bool.Properties as Bool
 open import Data.Empty using (⊥-elim)
 
 data Tree : Set where
@@ -136,6 +137,20 @@ merge-idʳ : (l : List ℕ) → merge' l [] ≡ l
 merge-idʳ [] = refl
 merge-idʳ (x ∷ l) = refl
 
+merge-assoc : ∀ (x y z : List ℕ) → merge' (merge' x y) z ≡ merge' x (merge' y z)
+merge-assoc [] y z = refl
+merge-assoc (x ∷ xs) [] z = refl
+merge-assoc (x ∷ xs) (y ∷ ys) [] =
+  let open ≡-Reasoning in
+  begin
+    merge' (merge' (x ∷ xs) (y ∷ ys)) []
+  ≡⟨ merge-idʳ (merge' (x ∷ xs) (y ∷ ys)) ⟩
+    merge' (x ∷ xs) (y ∷ ys)
+  ≡⟨ Eq.cong (merge' (x ∷ xs)) (merge-idʳ (y ∷ ys)) ⟩
+    merge' (x ∷ xs) (merge' (y ∷ ys) [])
+  ∎
+merge-assoc (x ∷ xs) (y ∷ ys) (z ∷ zs) = {!   !}
+
 meld/correct : ProperMeld meld
 meld/correct leaf t _ _ u = refl
 meld/correct t leaf _ _ u =
@@ -156,7 +171,7 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
     ret
       (x₁ ∷ merge' (merge' (toList l₁) (toList r₁))
         (x₂ ∷ merge' (toList l₂) (toList r₂)))
-  ≡⟨ {!   !} ⟩  -- invariant time: use a and mh₁/mh₂?
+  ≡⟨ Eq.cong (λ z → ret (x₁ ∷ z)) (merge-assoc (toList l₁) (toList r₁) (toList (node x₂ l₂ r₂))) ⟩
     ret (x₁ ∷ merge' (toList l₁) (merge' (toList r₁) (toList (node x₂ l₂ r₂))))
   ≡⟨⟩
     bind (F (list nat))
@@ -190,7 +205,7 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
         if rank l₁ <ᵇ rank x
           then bind (F (list nat)) (ret {tree} (node x₁ l₁ x)) (ret ∘ toList)
           else bind (F (list nat)) (ret {tree} (node x₁ x l₁)) (ret ∘ toList))
-  ≡⟨ {!   !} ⟩
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → Bool.if-float (λ y → bind (F (list nat)) y (ret {list nat} ∘ toList)) (rank l₁ <ᵇ rank x) {x = ret {tree} (node x₁ l₁ x)} {y = ret (node x₁ x l₁)})) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         bind (F (list nat))
