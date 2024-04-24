@@ -80,11 +80,11 @@ foo = node 1 (node 2 (node 4 leaf leaf) (node 5 leaf leaf)) (node 3 leaf leaf)
 fooWellRanked : WellRanked foo
 fooWellRanked = wellRankedNode (wellRankedNode (wellRankedNode wellRankedLeaf wellRankedLeaf z≤n) (wellRankedNode wellRankedLeaf wellRankedLeaf z≤n) (s≤s z≤n)) (wellRankedNode wellRankedLeaf wellRankedLeaf z≤n) (s≤s z≤n)
 
-MinHeap : Tree → Set
-MinHeap t = HeapAtLeast t 0
-
 fooHeapAtLeast : HeapAtLeast foo 1
 fooHeapAtLeast = minHeapNode (minHeapNode (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (s≤s z≤n)) (minHeapNode minHeapLeaf minHeapLeaf (s≤s z≤n)) (s≤s z≤n)
+
+MinHeap : Tree → Set
+MinHeap t = HeapAtLeast t 0
 
 merge' : List ℕ → List ℕ → List ℕ
 merge' = merge Nat._≤?_
@@ -97,41 +97,54 @@ data SortedList : List ℕ → ℕ → Set where
   sorted-nil : ∀ {n : ℕ} → SortedList [] n
   sorted-cons : ∀ {n x x' : ℕ} {xs : List ℕ} → SortedList xs x' → x Nat.≤ x' → n Nat.≤ x → SortedList (x ∷ xs) n
 
+sort-weaken : ∀ {m n : ℕ} {x : List ℕ} → SortedList x m → n Nat.≤ m → SortedList x n
+sort-weaken = {!   !}
+
 -- we need to strengthen to sorted lists
+{-# TERMINATING #-}
 merge-comm : ∀ {m n : ℕ} (x y : List ℕ) → SortedList x m → SortedList y n → merge' x y ≡ merge' y x
 merge-comm ([]) ([]) _ _ = refl
 merge-comm ([]) (y ∷ ys) _ _ = refl
 merge-comm (x ∷ xs) ([]) _ _ = refl
-merge-comm (x ∷ xs) (y ∷ ys) x≥m y≥n with x ≤ᵇ y | Nat.≤ᵇ-reflects-≤ x y | y ≤ᵇ x | Nat.≤ᵇ-reflects-≤ y x
+merge-comm (x ∷ xs) (y ∷ ys) x≥m@(sorted-cons xs≥x' x≤x' m≤x) y≥n@(sorted-cons ys≥y' y≤y' n≤y) with x ≤ᵇ y | Nat.≤ᵇ-reflects-≤ x y | y ≤ᵇ x | Nat.≤ᵇ-reflects-≤ y x
 ... | true | ofʸ x≤y | false | _ =
     let open ≡-Reasoning in
     begin
       x ∷ merge' xs (y ∷ ys)
-    ≡⟨ {!   !} ⟩
-      {!   !}
+    ≡⟨ Eq.cong (x ∷_) (merge-comm xs (y ∷ ys) xs≥x' y≥n) ⟩
+      x ∷ merge' (y ∷ ys) xs
     ∎
 ... | true | ofʸ x≤y | true | ofʸ y≤x =
     let open ≡-Reasoning in
     begin
       x ∷ merge' xs (y ∷ ys)
-    ≡⟨ Eq.cong (λ z → z ∷ merge' xs (y ∷ ys)) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟩
-      y ∷ merge' xs (y ∷ ys)
-    ≡⟨ Eq.cong (λ z → y ∷ merge' xs (z ∷ ys)) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟨
-      y ∷ merge' xs (x ∷ ys)
     ≡⟨ {!   !} ⟩
+      x ∷ merge' (y ∷ ys) xs
+    ≡⟨ {!   !} ⟩
+      x ∷ y ∷ merge' xs ys
+    ≡⟨ Eq.cong (λ a → a ∷ y ∷ merge' xs ys) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟩
+      y ∷ y ∷ merge' xs ys
+    ≡⟨ Eq.cong (λ a → y ∷ a ∷ merge' xs ys) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟨
+      y ∷ x ∷ merge' xs ys
+    ≡⟨ {!  !} ⟩
+      y ∷ merge' (x ∷ xs) ys
+    ≡⟨ Eq.cong (y ∷_) (merge-comm (x ∷ xs) ys x≥m ys≥y') ⟩
       y ∷ merge' ys (x ∷ xs)
     ∎
-... | false | _ | true | _ = {!   !}
-... | false | _ | false | _ = {!   !}
+... | false | _ | true | _ = {!   !} -- symmetric
+... | false | ofⁿ x≰y | false | ofⁿ y≰x = ⊥-elim (x≰y (Nat.<⇒≤ (Nat.≰⇒> y≰x)))
 
 toList : Tree → List ℕ
 toList leaf = []
 toList (node x l r) = x ∷ merge' (toList l) (toList r)
 
--- mergeing two sorted lists gives back another sorted list
+-- merging two sorted lists gives back another sorted list
 merge-sort : ∀ {n₁ n₂ : ℕ} {l₁ l₂ : List ℕ} → SortedList l₁ n₁ → SortedList l₂ n₂ → SortedList (merge' l₁ l₂) (n₁ Nat.⊓ n₂)
-merge-sort {l₁ = []} l₁≥n₁ l₂≥n₂ = {!   !}
-merge-sort {l₁ = x ∷ l₁} l₁≥n₁ l₂≥n₂ = {!   !}
+merge-sort {n₁} {n₂} {l₁ = []} l₁≥n₁ l₂≥n₂ = sort-weaken l₂≥n₂ (Nat.m⊓n≤n n₁ n₂)
+merge-sort {n₁} {n₂} {l₁ = x ∷ xs} {l₂ = []} l₁≥n₁ l₂≥n₂ = sort-weaken l₁≥n₁ (Nat.m⊓n≤m n₁ n₂)
+merge-sort {n₁} {n₂} {l₁ = x ∷ xs} {l₂ = y ∷ ys} l₁≥n₁ l₂≥n₂ with x ≤ᵇ y | Nat.≤ᵇ-reflects-≤ x y
+... | true | ofʸ x≤y = {!   !}
+... | false | ofⁿ x≰y = {!   !}
 
 min-id : ∀ {x : ℕ} → x Nat.≤ x Nat.⊓ x
 min-id {Nat.zero} = z≤n
@@ -159,6 +172,7 @@ merge-idʳ : (l : List ℕ) → merge' l [] ≡ l
 merge-idʳ [] = refl
 merge-idʳ (x ∷ l) = refl
 
+-- lots of tedious pattern matching here
 merge-assoc : ∀ (x y z : List ℕ) → merge' (merge' x y) z ≡ merge' x (merge' y z)
 merge-assoc [] y z = refl
 merge-assoc (x ∷ xs) [] z = refl
@@ -293,11 +307,5 @@ meld/cost (node x l r) leaf _ _ =
     (step (F tree) (rank r Nat.+ 1 Nat.+ 0) (ret (node x l r)))
   ∎
 meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) wr₁ wr₂ with x₁ ≤ᵇ x₂
-... | true =
-  let open ≤⁻-Reasoning (F tree) in
-  begin
-    ?
-  ≡⟨ ? ⟩
-    ?
-  ∎
+... | true = {!   !}
 ... | false = {!   !}
