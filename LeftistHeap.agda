@@ -86,34 +86,66 @@ MinHeap t = HeapAtLeast t 0
 fooHeapAtLeast : HeapAtLeast foo 1
 fooHeapAtLeast = minHeapNode (minHeapNode (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (s≤s z≤n)) (minHeapNode minHeapLeaf minHeapLeaf (s≤s z≤n)) (s≤s z≤n)
 
-{-# TERMINATING #-}
 merge' : List ℕ → List ℕ → List ℕ
 merge' = merge Nat._≤?_
 
-ifElim : ∀ {A : Set} {x : A} {b : Bool} → (if b then x else x) ≡ x
-ifElim {A} {x} {false} = refl
-ifElim {A} {x} {true} = refl
+if-elim : ∀ {A : Set} {x : A} {b : Bool} → (if b then x else x) ≡ x
+if-elim {A} {x} {false} = refl
+if-elim {A} {x} {true} = refl
 
-mergeComm : ∀ (x y : List ℕ) → merge' x y ≡ merge' y x
-mergeComm ([]) ([]) = refl
-mergeComm ([]) (y ∷ ys) = refl
-mergeComm (x ∷ xs) ([]) = refl
-mergeComm (x ∷ xs) (y ∷ ys) with x Nat.≤? y | y Nat.≤? x
-... | x≤y because ofʸ a | i =
+data SortedList : List ℕ → ℕ → Set where
+  sorted-nil : ∀ {n : ℕ} → SortedList [] n
+  sorted-cons : ∀ {n x x' : ℕ} {xs : List ℕ} → SortedList xs x' → x Nat.≤ x' → n Nat.≤ x → SortedList (x ∷ xs) n
+
+-- we need to strengthen to sorted lists
+merge-comm : ∀ {m n : ℕ} (x y : List ℕ) → SortedList x m → SortedList y n → merge' x y ≡ merge' y x
+merge-comm ([]) ([]) _ _ = refl
+merge-comm ([]) (y ∷ ys) _ _ = refl
+merge-comm (x ∷ xs) ([]) _ _ = refl
+merge-comm (x ∷ xs) (y ∷ ys) x≥m y≥n with x ≤ᵇ y | Nat.≤ᵇ-reflects-≤ x y | y ≤ᵇ x | Nat.≤ᵇ-reflects-≤ y x
+... | true | ofʸ x≤y | false | _ =
     let open ≡-Reasoning in
     begin
-      {!  x ∷ merge' xs (y ∷ ys) !}
+      x ∷ merge' xs (y ∷ ys)
     ≡⟨ {!   !} ⟩
       {!   !}
     ∎
-... | false because ofⁿ ¬a | i = {!   !}
+... | true | ofʸ x≤y | true | ofʸ y≤x =
+    let open ≡-Reasoning in
+    begin
+      x ∷ merge' xs (y ∷ ys)
+    ≡⟨ Eq.cong (λ z → z ∷ merge' xs (y ∷ ys)) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟩
+      y ∷ merge' xs (y ∷ ys)
+    ≡⟨ Eq.cong (λ z → y ∷ merge' xs (z ∷ ys)) (Nat.≤∧≮⇒≡ x≤y (Nat.≤⇒≯ y≤x)) ⟨
+      y ∷ merge' xs (x ∷ ys)
+    ≡⟨ {!   !} ⟩
+      y ∷ merge' ys (x ∷ xs)
+    ∎
+... | false | _ | true | _ = {!   !}
+... | false | _ | false | _ = {!   !}
 
 toList : Tree → List ℕ
 toList leaf = []
 toList (node x l r) = x ∷ merge' (toList l) (toList r)
 
-toListMergeComm : {x : ℕ} (l r : Tree) → toList (node x l r) ≡ toList (node x r l)
-toListMergeComm {x} l r = Eq.cong (x ∷_) (mergeComm (toList l) (toList r))
+-- mergeing two sorted lists gives back another sorted list
+merge-sort : ∀ {n₁ n₂ : ℕ} {l₁ l₂ : List ℕ} → SortedList l₁ n₁ → SortedList l₂ n₂ → SortedList (merge' l₁ l₂) (n₁ Nat.⊓ n₂)
+merge-sort {l₁ = []} l₁≥n₁ l₂≥n₂ = {!   !}
+merge-sort {l₁ = x ∷ l₁} l₁≥n₁ l₂≥n₂ = {!   !}
+
+min-id : ∀ {x : ℕ} → x Nat.≤ x Nat.⊓ x
+min-id {Nat.zero} = z≤n
+min-id {suc x} = s≤s min-id
+
+toList-sort : {t : Tree} {n : ℕ} → HeapAtLeast t n → SortedList (toList t) n
+toList-sort {leaf} {n} h = sorted-nil
+toList-sort {node x l r} {n} (minHeapNode l≥x r≥x n≤x) =
+  let ls = toList-sort l≥x in
+  let rs = toList-sort r≥x in
+  let m = merge-sort ls rs in sorted-cons m min-id n≤x
+
+toList-merge-comm : {x : ℕ} (l r : Tree) → HeapAtLeast l _ → HeapAtLeast r _ → toList (node x l r) ≡ toList (node x r l)
+toList-merge-comm {x} l r l≥ r≥ = Eq.cong (x ∷_) (merge-comm (toList l) (toList r) (toList-sort l≥) (toList-sort r≥))
 
 -- toListHIsSorted : ∀ {h : Tree} → sorted (toList h)
 
@@ -189,13 +221,13 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x → ret (toList (node x₁ l₁ x)))  -- ???
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → ifElim)) ⟨
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → if-elim)) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         if rank l₁ ≤ᵇ rank x
           then ret (toList (node x₁ l₁ x))
           else ret (toList (node x₁ l₁ x)))
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ ≤ᵇ rank x then ret (toList (node x₁ l₁ x)) else (ret (z x)))) (funext (toListMergeComm l₁)) ⟩
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ ≤ᵇ rank x then ret (toList (node x₁ l₁ x)) else (ret (z x)))) (funext (λ t → toList-merge-comm l₁ t {!   !} {!   !})) ⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         if rank l₁ ≤ᵇ rank x
@@ -229,10 +261,10 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
   ∎
 ... | yes p | .false | ofⁿ ¬a | _ | _ = ⊥-elim (¬a p)
 ... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a) 
-... | no p | .false | ofⁿ ¬a | _ | _ = {!   !} -- symmetric?
+... | no p | .false | ofⁿ x₁≰x₂ | _ | _ = {!   !} -- symmetric
 
-meld/cost : ∀ (t₁ t₂ : val tree) → Σ[ t ∈ Tree ] (meld t₁ t₂ ≤⁺[ U (F tree) ] step (F tree) (rank t₁ Nat.+ rank t₂) (ret t))
-meld/cost leaf leaf =
+meld/cost : ∀ (t₁ t₂ : val tree) → WellRanked t₁ → WellRanked t₂ → Σ[ t ∈ Tree ] (meld t₁ t₂ ≤⁺[ U (F tree) ] step (F tree) (rank t₁ Nat.+ rank t₂) (ret t))
+meld/cost leaf leaf _ _ =
   leaf ,
   let open ≤⁻-Reasoning (F tree) in
   begin
@@ -240,7 +272,7 @@ meld/cost leaf leaf =
   ≡⟨ step/0 {F tree} ⟨
     step (F tree) 0 (ret leaf)
   ∎
-meld/cost leaf (node x l r) =
+meld/cost leaf (node x l r) _ _ =
   (node x l r) ,
   let open ≤⁻-Reasoning (F tree) in
   begin
@@ -250,7 +282,7 @@ meld/cost leaf (node x l r) =
   ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
     (step (F tree) (rank (node x l r)) (ret (node x l r)))
   ∎
-meld/cost (node x l r) leaf =
+meld/cost (node x l r) leaf _ _ =
   (node x l r) ,
   let open ≤⁻-Reasoning (F tree) in
   begin
@@ -260,6 +292,12 @@ meld/cost (node x l r) leaf =
   ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
     (step (F tree) (rank r Nat.+ 1 Nat.+ 0) (ret (node x l r)))
   ∎
-meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) with x₁ ≤ᵇ x₂
-... | true = {!   !}
+meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) wr₁ wr₂ with x₁ ≤ᵇ x₂
+... | true =
+  let open ≤⁻-Reasoning (F tree) in
+  begin
+    ?
+  ≡⟨ ? ⟩
+    ?
+  ∎
 ... | false = {!   !}
