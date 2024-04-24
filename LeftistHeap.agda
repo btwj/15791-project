@@ -19,7 +19,7 @@ open import Calf.Data.IsBounded costMonoid
 open import Calf.Data.BigO costMonoid
 
 open import Relation.Binary.PropositionalEquality as Eq using (_≡_; refl; _≢_; module ≡-Reasoning)
-open import Data.Nat as Nat using (_+_; _⊔_; _<_)
+open import Data.Nat as Nat using (_+_; _⊔_; _≤_)
 import Data.Nat.Properties as Nat
 import Data.Bool.Properties as Bool
 open import Data.Empty using (⊥-elim)
@@ -39,7 +39,7 @@ rank leaf = 0
 rank (node x l r) = rank r Nat.+ 1
 
 join : cmp (Π tree λ _ → Π nat λ _ → Π tree λ _ → F tree)
-join t₁ a t₂ = if rank t₁ <ᵇ rank t₂ then ret (node a t₁ t₂) else ret (node a t₂ t₁)
+join t₁ a t₂ = if rank t₁ ≤ᵇ rank t₂ then ret (node a t₁ t₂) else ret (node a t₂ t₁)
 
 meld : cmp (Π tree λ _ → Π tree λ _ → F tree)
 meld leaf t = ret t
@@ -65,13 +65,6 @@ data WellRanked : Tree → Set where
   wellRankedLeaf : WellRanked leaf
   wellRankedNode : ∀ {l r : Tree}{x : val nat} → WellRanked l → WellRanked r → rank r Nat.≤ rank l → WellRanked (node x l r)
 
-minOpt : val nat → Maybe (val nat) → val nat
-minOpt x nothing = x
-minOpt x (just y) = if x <ᵇ y then x else y
-
-min2Opt : val nat → Maybe (val nat) → Maybe (val nat) → val nat
-min2Opt x y z = minOpt (minOpt x y) z
-
 root : Tree → Maybe (val nat)
 root leaf = nothing
 root (node x l r) = just x
@@ -93,6 +86,7 @@ MinHeap t = HeapAtLeast t 0
 fooHeapAtLeast : HeapAtLeast foo 1
 fooHeapAtLeast = minHeapNode (minHeapNode (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (minHeapNode minHeapLeaf minHeapLeaf (s≤s (s≤s z≤n))) (s≤s z≤n)) (minHeapNode minHeapLeaf minHeapLeaf (s≤s z≤n)) (s≤s z≤n)
 
+{-# TERMINATING #-}
 merge' : List ℕ → List ℕ → List ℕ
 merge' = merge Nat._≤?_
 
@@ -100,32 +94,26 @@ ifElim : ∀ {A : Set} {x : A} {b : Bool} → (if b then x else x) ≡ x
 ifElim {A} {x} {false} = refl
 ifElim {A} {x} {true} = refl
 
-mergeComm : ∀ {x y : List ℕ} → merge' x y ≡ merge' y x
-mergeComm {[]} {[]} = refl
-mergeComm {[]} {y ∷ ys} = refl
-mergeComm {x ∷ xs} {[]} = refl
-mergeComm {x ∷ xs} {y ∷ ys} with x Nat.≤? y | x ≤ᵇ y | Nat.≤ᵇ-reflects-≤ x y
-... | yes p | .true | ofʸ x≤y =
-        let open ≡-Reasoning in
-        begin
-          x ∷ merge' xs (y ∷ ys)
-        ≡⟨ Eq.cong (x ∷_) (mergeComm {xs} {y ∷ ys}) ⟩
-          x ∷ merge' (y ∷ ys) xs
-        ≡⟨ {! refl  !} ⟩
-          (if y ≤ᵇ x then (y ∷ merge' ys (x ∷ xs)) else (x ∷ merge' (y ∷ ys) xs))
-        ≡⟨⟩
-          merge' (y ∷ ys) (x ∷ xs)
-        ∎
-... | yes p | .false | ofⁿ ¬a = ⊥-elim (¬a p)
-... | no p | .false | ofⁿ _ = {!   !}
-... | no p | .true | ofʸ a = ⊥-elim (p a)
+mergeComm : ∀ (x y : List ℕ) → merge' x y ≡ merge' y x
+mergeComm ([]) ([]) = refl
+mergeComm ([]) (y ∷ ys) = refl
+mergeComm (x ∷ xs) ([]) = refl
+mergeComm (x ∷ xs) (y ∷ ys) with x Nat.≤? y | y Nat.≤? x
+... | x≤y because ofʸ a | i =
+    let open ≡-Reasoning in
+    begin
+      {!  x ∷ merge' xs (y ∷ ys) !}
+    ≡⟨ {!   !} ⟩
+      {!   !}
+    ∎
+... | false because ofⁿ ¬a | i = {!   !}
 
 toList : Tree → List ℕ
 toList leaf = []
 toList (node x l r) = x ∷ merge' (toList l) (toList r)
 
 toListMergeComm : {x : ℕ} (l r : Tree) → toList (node x l r) ≡ toList (node x r l)
-toListMergeComm {x} l r = Eq.cong (x ∷_) (mergeComm {toList l} {toList r})
+toListMergeComm {x} l r = Eq.cong (x ∷_) (mergeComm (toList l) (toList r))
 
 -- toListHIsSorted : ∀ {h : Tree} → sorted (toList h)
 
@@ -204,26 +192,26 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
   ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → ifElim)) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
-        if rank l₁ <ᵇ rank x
+        if rank l₁ ≤ᵇ rank x
           then ret (toList (node x₁ l₁ x))
           else ret (toList (node x₁ l₁ x)))
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ <ᵇ rank x then ret (toList (node x₁ l₁ x)) else (ret (z x)))) (funext (toListMergeComm l₁)) ⟩
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ ≤ᵇ rank x then ret (toList (node x₁ l₁ x)) else (ret (z x)))) (funext (toListMergeComm l₁)) ⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
-        if rank l₁ <ᵇ rank x
+        if rank l₁ ≤ᵇ rank x
           then ret (toList (node x₁ l₁ x))
           else ret (toList (node x₁ x l₁)))
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
-        if rank l₁ <ᵇ rank x
+        if rank l₁ ≤ᵇ rank x
           then bind (F (list nat)) (ret {tree} (node x₁ l₁ x)) (ret ∘ toList)
           else bind (F (list nat)) (ret {tree} (node x₁ x l₁)) (ret ∘ toList))
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → Bool.if-float (λ y → bind (F (list nat)) y (ret {list nat} ∘ toList)) (rank l₁ <ᵇ rank x) {x = ret {tree} (node x₁ l₁ x)} {y = ret (node x₁ x l₁)})) ⟨
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → Bool.if-float (λ y → bind (F (list nat)) y (ret {list nat} ∘ toList)) (rank l₁ ≤ᵇ rank x) {x = ret {tree} (node x₁ l₁ x)} {y = ret (node x₁ x l₁)})) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         bind (F (list nat))
-        (if rank l₁ <ᵇ rank x then ret {tree} (node x₁ l₁ x) else ret (node x₁ x l₁))
+        (if rank l₁ ≤ᵇ rank x then ret {tree} (node x₁ l₁ x) else ret (node x₁ x l₁))
         (ret ∘ toList))
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
@@ -242,3 +230,36 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
 ... | yes p | .false | ofⁿ ¬a | _ | _ = ⊥-elim (¬a p)
 ... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a) 
 ... | no p | .false | ofⁿ ¬a | _ | _ = {!   !} -- symmetric?
+
+meld/cost : ∀ (t₁ t₂ : val tree) → Σ[ t ∈ Tree ] (meld t₁ t₂ ≤⁺[ U (F tree) ] step (F tree) (rank t₁ Nat.+ rank t₂) (ret t))
+meld/cost leaf leaf =
+  leaf ,
+  let open ≤⁻-Reasoning (F tree) in
+  begin
+    ret leaf
+  ≡⟨ step/0 {F tree} ⟨
+    step (F tree) 0 (ret leaf)
+  ∎
+meld/cost leaf (node x l r) =
+  (node x l r) ,
+  let open ≤⁻-Reasoning (F tree) in
+  begin
+    ret (node x l r)
+  ≡⟨ (step/0 {F tree}) ⟨
+    (step (F tree) 0 (ret (node x l r)))
+  ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
+    (step (F tree) (rank (node x l r)) (ret (node x l r)))
+  ∎
+meld/cost (node x l r) leaf =
+  (node x l r) ,
+  let open ≤⁻-Reasoning (F tree) in
+  begin
+    ret (node x l r)
+  ≡⟨ (step/0 {F tree}) ⟨
+    (step (F tree) 0 (ret (node x l r)))
+  ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
+    (step (F tree) (rank r Nat.+ 1 Nat.+ 0) (ret (node x l r)))
+  ∎
+meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) with x₁ ≤ᵇ x₂
+... | true = {!   !}
+... | false = {!   !}
