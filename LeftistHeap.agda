@@ -160,8 +160,6 @@ toList-sort {node x l r} {n} (minHeapNode l≥x r≥x n≤x) =
 toList-merge-comm : {x : ℕ} (l r : Tree) → HeapAtLeast l _ → HeapAtLeast r _ → toList (node x l r) ≡ toList (node x r l)
 toList-merge-comm {x} l r l≥ r≥ = Eq.cong (x ∷_) (merge-comm (toList l) (toList r) (toList-sort l≥) (toList-sort r≥))
 
--- toListHIsSorted : ∀ {h : Tree} → sorted (toList h)
-
 -- Correctness 
 -- properMeld : ∀ {h₁ h₂ : val tree} → toList (meld h₁ h₂) ≡ merge ? (toList h₁) (toList h₂)
 ProperMeld : cmp (Π tree λ _ → Π tree λ _ → F tree) → Set
@@ -172,7 +170,7 @@ merge-idʳ : (l : List ℕ) → merge' l [] ≡ l
 merge-idʳ [] = refl
 merge-idʳ (x ∷ l) = refl
 
--- lots of tedious pattern matching here
+-- lots of tedious pattern matching here :(
 merge-assoc : ∀ (x y z : List ℕ) → merge' (merge' x y) z ≡ merge' x (merge' y z)
 merge-assoc [] y z = refl
 merge-assoc (x ∷ xs) [] z = refl
@@ -277,35 +275,69 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
 ... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a) 
 ... | no p | .false | ofⁿ x₁≰x₂ | _ | _ = {!   !} -- symmetric
 
-meld/cost : ∀ (t₁ t₂ : val tree) → WellRanked t₁ → WellRanked t₂ → Σ[ t ∈ Tree ] (meld t₁ t₂ ≤⁺[ U (F tree) ] step (F tree) (rank t₁ Nat.+ rank t₂) (ret t))
+{-# TERMINATING #-}
+meld/cost : ∀ (t₁ t₂ : val tree) → WellRanked t₁ → WellRanked t₂ → Σ[ t ∈ Tree ] Σ[ n ∈ ℕ ] (WellRanked t × n Nat.≤ (rank t₁ Nat.+ rank t₂) × meld t₁ t₂ ≡ step (F tree) n (ret t))
 meld/cost leaf leaf _ _ =
-  leaf ,
-  let open ≤⁻-Reasoning (F tree) in
+  leaf , 0 , wellRankedLeaf , z≤n ,
+  let open ≡-Reasoning in
   begin
     ret leaf
   ≡⟨ step/0 {F tree} ⟨
     step (F tree) 0 (ret leaf)
   ∎
-meld/cost leaf (node x l r) _ _ =
-  (node x l r) ,
-  let open ≤⁻-Reasoning (F tree) in
+meld/cost t₁@leaf t₂@(node x l r) _ wr₂ =
+  (node x l r) , 0 , wr₂ , z≤n ,
+  let open ≡-Reasoning in
   begin
     ret (node x l r)
   ≡⟨ (step/0 {F tree}) ⟨
     (step (F tree) 0 (ret (node x l r)))
-  ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
-    (step (F tree) (rank (node x l r)) (ret (node x l r)))
   ∎
-meld/cost (node x l r) leaf _ _ =
-  (node x l r) ,
-  let open ≤⁻-Reasoning (F tree) in
+meld/cost t₁@(node x l r) t₂@leaf wr₁ _ =
+  (node x l r) , 0 , wr₁ , z≤n ,
+  let open ≡-Reasoning in
   begin
     ret (node x l r)
   ≡⟨ (step/0 {F tree}) ⟨
     (step (F tree) 0 (ret (node x l r)))
-  ≲⟨ step-monoˡ-≤⁻ (ret (node x l r)) z≤n ⟩
-    (step (F tree) (rank r Nat.+ 1 Nat.+ 0) (ret (node x l r)))
   ∎
 meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) wr₁ wr₂ with x₁ ≤ᵇ x₂
-... | true = {!   !}
-... | false = {!   !}
+... | true =
+  let t' , n' , ( _ , n'≤r , meld≡ ) = meld/cost r₁ (node x₂ l₂ r₂) {!   !} wr₂ in
+  (if rank l₁ ≤ᵇ rank t' then (node x₁ l₁ t') else (node x₁ t' l₁)) , 
+  1 Nat.+ n' , {!   !} , {!  !} , -- math
+  let open ≡-Reasoning in
+  begin
+    (step (F tree) 1 (bind (F tree) (meld r₁ (node x₂ l₂ r₂))
+      (λ t₂ →
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
+          ret (node x₁ t₂ l₁))))
+  ≡⟨ Eq.cong (λ z → (step (F tree) 1 (bind (F tree) z (λ t₂ → if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else ret (node x₁ t₂ l₁))))) meld≡ ⟩
+    (step (F tree) 1 (bind (F tree) (step (F tree) n' (ret t'))
+      (λ t₂ →
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
+          ret (node x₁ t₂ l₁))))
+  ≡⟨⟩
+    (step (F tree) 1 (step (F tree) n' (bind (F tree) (ret {tree} t') (λ t₂ →
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
+          ret (node x₁ t₂ l₁)))))
+  ≡⟨⟩
+    step (F tree) (1 Nat.+ n')
+      (if rank l₁ ≤ᵇ rank t' then ret (node x₁ l₁ t') else
+          ret (node x₁ t' l₁))
+  ≡⟨ Eq.cong (step (F tree) (1 Nat.+ n')) (Bool.if-float ret (rank l₁ ≤ᵇ rank t')) ⟨
+    step (F tree) (1 Nat.+ n')
+      (ret (if rank l₁ ≤ᵇ rank t' then (node x₁ l₁ t') else (node x₁ t' l₁)))
+  ∎
+... | false =
+  let t' , n' , ( _ , n'≤r , meld≡ ) = meld/cost (node x₁ l₁ r₁) r₂ wr₁ {!   !} in 
+  (if rank l₂ ≤ᵇ rank t' then (node x₂ l₂ t') else (node x₂ t' l₂)), 
+  {!   !} ,
+  {!   !} ,
+  {!   !} ,
+  let open ≡-Reasoning in
+  begin 
+    {!   !} -- symmetric as previous case
+  ≡⟨ {!   !} ⟩
+    {!   !}
+  ∎
