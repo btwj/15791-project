@@ -39,7 +39,7 @@ rank leaf = 0
 rank (node x l r) = rank r Nat.+ 1
 
 join : cmp (Π tree λ _ → Π nat λ _ → Π tree λ _ → F tree)
-join t₁ a t₂ = if rank t₁ ≤ᵇ rank t₂ then ret (node a t₁ t₂) else ret (node a t₂ t₁)
+join t₁ a t₂ = if rank t₁ ≤ᵇ rank t₂ then ret (node a t₂ t₁) else ret (node a t₁ t₂) 
 
 meld : cmp (Π tree λ _ → Π tree λ _ → F tree)
 meld leaf t = ret t
@@ -239,23 +239,23 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
         if rank l₁ ≤ᵇ rank x
           then ret (toList (node x₁ l₁ x))
           else ret (toList (node x₁ l₁ x)))
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ ≤ᵇ rank x then ret (toList (node x₁ l₁ x)) else (ret (z x)))) (funext (λ t → toList-merge-comm l₁ t {!   !} {!   !})) ⟩
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → if rank l₁ ≤ᵇ rank x then (ret (z x)) else ret (toList (node x₁ l₁ x)))) (funext (λ t → toList-merge-comm l₁ t {!   !} {!   !})) ⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         if rank l₁ ≤ᵇ rank x
-          then ret (toList (node x₁ l₁ x))
-          else ret (toList (node x₁ x l₁)))
+          then ret (toList (node x₁ x l₁))
+          else ret (toList (node x₁ l₁ x)))
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         if rank l₁ ≤ᵇ rank x
-          then bind (F (list nat)) (ret {tree} (node x₁ l₁ x)) (ret ∘ toList)
-          else bind (F (list nat)) (ret {tree} (node x₁ x l₁)) (ret ∘ toList))
-  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → Bool.if-float (λ y → bind (F (list nat)) y (ret {list nat} ∘ toList)) (rank l₁ ≤ᵇ rank x) {x = ret {tree} (node x₁ l₁ x)} {y = ret (node x₁ x l₁)})) ⟨
+          then bind (F (list nat)) (ret {tree} (node x₁ x l₁)) (ret ∘ toList)
+          else bind (F (list nat)) (ret {tree} (node x₁ l₁ x)) (ret ∘ toList))
+  ≡⟨ Eq.cong (λ z → bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂)) (λ x → z x)) (funext (λ x → Bool.if-float (λ y → bind (F (list nat)) y (ret {list nat} ∘ toList)) (rank l₁ ≤ᵇ rank x) {x = ret {tree} (node x₁ x l₁)} {y = ret (node x₁ l₁ x)})) ⟨
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
       (λ x →
         bind (F (list nat))
-        (if rank l₁ ≤ᵇ rank x then ret {tree} (node x₁ l₁ x) else ret (node x₁ x l₁))
+        (if rank l₁ ≤ᵇ rank x then ret {tree} (node x₁ x l₁) else ret (node x₁ l₁ x))
         (ret ∘ toList))
   ≡⟨⟩
     bind (F (list nat)) (meld r₁ (node x₂ l₂ r₂))
@@ -274,6 +274,12 @@ meld/correct (node x₁ l₁ r₁) (node x₂ l₂ r₂) mh₁ mh₂ u with x₁
 ... | yes p | .false | ofⁿ ¬a | _ | _ = ⊥-elim (¬a p)
 ... | no p | .true | ofʸ a | _ | _ = ⊥-elim (p a) 
 ... | no p | .false | ofⁿ x₁≰x₂ | _ | _ = {!   !} -- symmetric
+
+
+well-ranked-result : (x : ℕ) (l : Tree) (r : Tree) → WellRanked l → WellRanked r → WellRanked (if rank l ≤ᵇ rank r then node x r l else node x l r)
+well-ranked-result x l r wrₗ wrᵣ with rank l ≤ᵇ rank r | Nat.≤ᵇ-reflects-≤ (rank l) (rank r) 
+... | true | ofʸ l≤r = wellRankedNode wrᵣ wrₗ l≤r
+... | false | ofⁿ l≰r = wellRankedNode wrₗ wrᵣ (Nat.≰⇒≥ l≰r)
 
 {-# TERMINATING #-}
 meld/cost : ∀ (t₁ t₂ : val tree) → WellRanked t₁ → WellRanked t₂ → Σ[ t ∈ Tree ] Σ[ n ∈ ℕ ] (WellRanked t × n Nat.≤ (rank t₁ Nat.+ rank t₂) × meld t₁ t₂ ≡ step (F tree) n (ret t))
@@ -301,43 +307,53 @@ meld/cost t₁@(node x l r) t₂@leaf wr₁ _ =
   ≡⟨ (step/0 {F tree}) ⟨
     (step (F tree) 0 (ret (node x l r)))
   ∎
-meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) wr₁ wr₂ with x₁ ≤ᵇ x₂
+meld/cost (node x₁ l₁ r₁) (node x₂ l₂ r₂) wr₁@(wellRankedNode wrl₁ wrr₁ _) wr₂@(wellRankedNode wrl₂ wrr₂ _) with x₁ ≤ᵇ x₂
 ... | true =
-  let t' , n' , ( _ , n'≤r , meld≡ ) = meld/cost r₁ (node x₂ l₂ r₂) {!   !} wr₂ in
-  (if rank l₁ ≤ᵇ rank t' then (node x₁ l₁ t') else (node x₁ t' l₁)) , 
-  1 Nat.+ n' , {!   !} , {!  !} , -- math
+  let t' , n' , ( wr' , n'≤r , meld≡ ) = meld/cost r₁ (node x₂ l₂ r₂) wrr₁ wr₂ in
+  (if rank l₁ ≤ᵇ rank t' then (node x₁ t' l₁) else (node x₁ l₁ t')) , 
+  1 Nat.+ n' ,
+  well-ranked-result x₁ l₁ t' wrl₁ wr' ,
+  {!   !} , -- math: 1 + n' ≤ rank r₁ + 1 + rank r₂ + 1, where n' ≤ rank r₁ + rank r₂ + 1
   let open ≡-Reasoning in
   begin
     (step (F tree) 1 (bind (F tree) (meld r₁ (node x₂ l₂ r₂))
       (λ t₂ →
-          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
-          ret (node x₁ t₂ l₁))))
-  ≡⟨ Eq.cong (λ z → (step (F tree) 1 (bind (F tree) z (λ t₂ → if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else ret (node x₁ t₂ l₁))))) meld≡ ⟩
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ t₂ l₁) else ret (node x₁ l₁ t₂))))
+  ≡⟨ Eq.cong (λ z → (step (F tree) 1 (bind (F tree) z (λ t₂ → if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ t₂ l₁) else ret (node x₁ l₁ t₂))))) meld≡ ⟩
     (step (F tree) 1 (bind (F tree) (step (F tree) n' (ret t'))
       (λ t₂ →
-          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
-          ret (node x₁ t₂ l₁))))
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ t₂ l₁) else ret (node x₁ l₁ t₂))))
   ≡⟨⟩
     (step (F tree) 1 (step (F tree) n' (bind (F tree) (ret {tree} t') (λ t₂ →
-          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ l₁ t₂) else
-          ret (node x₁ t₂ l₁)))))
+          if rank l₁ ≤ᵇ rank t₂ then ret (node x₁ t₂ l₁) else ret (node x₁ l₁ t₂)))))
   ≡⟨⟩
     step (F tree) (1 Nat.+ n')
-      (if rank l₁ ≤ᵇ rank t' then ret (node x₁ l₁ t') else
-          ret (node x₁ t' l₁))
+      (if rank l₁ ≤ᵇ rank t' then ret (node x₁ t' l₁) else ret (node x₁ l₁ t'))
   ≡⟨ Eq.cong (step (F tree) (1 Nat.+ n')) (Bool.if-float ret (rank l₁ ≤ᵇ rank t')) ⟨
     step (F tree) (1 Nat.+ n')
-      (ret (if rank l₁ ≤ᵇ rank t' then (node x₁ l₁ t') else (node x₁ t' l₁)))
+      (ret (if rank l₁ ≤ᵇ rank t' then (node x₁ t' l₁) else (node x₁ l₁ t')))
   ∎
 ... | false =
-  let t' , n' , ( _ , n'≤r , meld≡ ) = meld/cost (node x₁ l₁ r₁) r₂ wr₁ {!   !} in 
-  (if rank l₂ ≤ᵇ rank t' then (node x₂ l₂ t') else (node x₂ t' l₂)), 
-  {!   !} ,
-  {!   !} ,
-  {!   !} ,
+  let t' , n' , ( wr' , n'≤r , meld≡ ) = meld/cost (node x₁ l₁ r₁) r₂ wr₁ wrr₂ in 
+  (if rank l₂ ≤ᵇ rank t' then (node x₂ t' l₂) else (node x₂ l₂ t')), 
+  1 Nat.+ n' ,
+  well-ranked-result x₂ l₂ t' wrl₂ wr' ,
+  {!   !} , -- math: 1 + n' ≤ rank r₁ + 1 + rank r₂ + 1, where n' ≤ rank r₁ + rank r₂ + 1
   let open ≡-Reasoning in
-  begin 
-    {!   !} -- symmetric as previous case
-  ≡⟨ {!   !} ⟩
-    {!   !}
-  ∎
+  begin -- symmetric as previous case
+    (step (F tree) 1 (bind (F tree) (meld (node x₁ l₁ r₁) r₂)
+       (λ t₂ →
+          if rank l₂ ≤ᵇ rank t₂ then ret (node x₂ t₂ l₂) else
+          ret (node x₂ l₂ t₂)))) 
+  ≡⟨ Eq.cong (λ z → step (F tree) 1 (bind (F tree) z (λ t₂ → if rank l₂ ≤ᵇ rank t₂ then ret (node x₂ t₂ l₂) else ret (node x₂ l₂ t₂)))) meld≡ ⟩
+    (step (F tree) 1 (bind (F tree) (step (F tree) n' (ret t'))
+       (λ t₂ →
+          if rank l₂ ≤ᵇ rank t₂ then ret (node x₂ t₂ l₂) else
+          ret (node x₂ l₂ t₂))))
+  ≡⟨⟩
+    (step (F tree) (1 Nat.+ n')
+      (if rank l₂ ≤ᵇ rank t' then ret (node x₂ t' l₂) else ret (node x₂ l₂ t')))
+  ≡⟨ Eq.cong (step (F tree) (1 Nat.+ n')) (Bool.if-float ret (rank l₂ ≤ᵇ rank t')) ⟨
+    step (F tree) (1 Nat.+ n')
+      (ret (if rank l₂ ≤ᵇ rank t' then (node x₂ t' l₂) else (node x₂ l₂ t')))
+  ∎ 
